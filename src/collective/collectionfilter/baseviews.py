@@ -8,6 +8,7 @@ from collective.collectionfilter import PLONE_VERSION
 from collective.collectionfilter.filteritems import get_filter_items
 from collective.collectionfilter.interfaces import IGroupByCriteria
 from collective.collectionfilter.query import make_query
+from collective.collectionfilter.filteritems import get_section_filter_items
 from collective.collectionfilter.utils import base_query
 from collective.collectionfilter.utils import safe_iterable
 from collective.collectionfilter.utils import safe_decode
@@ -133,7 +134,7 @@ class BaseFilterView(BaseView):
             show_count=self.settings.show_count,
             view_name=self.settings.view_name,
             cache_enabled=self.settings.cache_enabled,
-            request_params=self.top_request.form or {}
+            request_params=self.top_request.form or {},
         )
         return results
 
@@ -141,7 +142,6 @@ class BaseFilterView(BaseView):
     def is_available(self):
         if not self.settings.hide_if_empty:
             return True
-
         if self.settings.narrow_down:
             groupby_criteria = getUtility(IGroupByCriteria).groupby
             idx = groupby_criteria[self.settings.group_by]['index']
@@ -152,6 +152,45 @@ class BaseFilterView(BaseView):
 
         results = self.results()
         return not (results is None or len(results) <= 2)  # 2 becayse we include "All"
+
+
+class BaseSectionView(BaseView):
+    @property
+    def input_type(self):
+        if self.settings.input_type == 'links':
+            return 'link'
+        elif self.settings.filter_type == 'single':
+            if self.settings.input_type == 'checkboxes_radiobuttons':
+                return 'radio'
+            else:
+                return 'dropdown'
+        else:
+            return 'checkbox'
+
+    @property
+    def is_available(self):
+        return True
+
+    def paths(self):
+        paths = [{'title': 'Home', 'level': 0}]
+        params = self.top_request.form or {}
+        path = params.get('path', None)
+        if path is None:
+            return paths
+        level = 0
+        for path in path.split('/'):
+            level += 1
+            paths.append({'title': path, 'level': level})
+        return paths
+
+    def results(self):
+        results = get_section_filter_items(
+            target_collection=self.settings.target_collection,
+            view_name=self.settings.view_name,
+            cache_enabled=self.settings.cache_enabled,
+            request_params=self.top_request.form or {}
+        )
+        return results
 
 
 class BaseSearchView(BaseView):
