@@ -15,4 +15,8 @@
       title="Collection Section Filter"
       description="This portlet allows filtering of collection results based on their position in the site."
       />
+    <portlet
+      remove="True"
+      addview="collective.collectionfilter.portlets.CollectionLocationFilter"
+      />
 </portlets>
