@@ -15,6 +15,7 @@ Changelog
 - Add Section Filter portlet. Allows to filter results based on location in site.
   [instification, JeffersonBledsoe]
 
+
 Bug fixes:
 
  - Use plone.memoize to cache groupby criteria
