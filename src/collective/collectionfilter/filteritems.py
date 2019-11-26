@@ -8,6 +8,7 @@ from collective.collectionfilter.utils import safe_encode
 from collective.collectionfilter.utils import safe_iterable
 from collective.collectionfilter.vocabularies import DEFAULT_FILTER_TYPE
 from collective.collectionfilter.vocabularies import EMPTY_MARKER
+from Missing import Missing
 from plone.app.contenttypes.behaviors.collection import ICollection
 from plone.app.event.base import _prepare_range
 from plone.app.event.base import guess_date_from
@@ -174,7 +175,7 @@ def get_filter_items(
         val = safe_iterable(val)
 
         for filter_value in val:
-            if not filter_value:
+            if filter_value is None or isinstance(filter_value, Missing):
                 continue
             if value_blacklist and filter_value in value_blacklist:
                 # Do not include blacklisted
@@ -188,7 +189,7 @@ def get_filter_items(
             # e.g. uuid to title
             title = filter_value
             if filter_value is not EMPTY_MARKER and callable(display_modifier):
-                title = _(safe_decode(display_modifier(filter_value)))
+                title = safe_decode(display_modifier(filter_value))
 
             # Build filter url query
             _urlquery = urlquery.copy()
