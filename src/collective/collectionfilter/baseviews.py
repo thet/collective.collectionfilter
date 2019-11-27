@@ -175,18 +175,6 @@ class BaseSectionView(BaseView):
     def is_available(self):
         return True
 
-    def paths(self):
-        paths = [{'title': 'Home', 'level': 0}]
-        params = self.top_request.form or {}
-        path = params.get('path', None)
-        if path is None:
-            return paths
-        level = 0
-        for path in path.split('/'):
-            level += 1
-            paths.append({'title': path, 'level': level})
-        return paths
-
     def results(self):
         results = get_section_filter_items(
             target_collection=self.settings.target_collection,
