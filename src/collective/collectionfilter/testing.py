@@ -159,6 +159,7 @@ class CollectiveCollectionFilterAjaxEnabledLayer(CollectiveCollectionFilterLayer
         _set_ajax_enabled(True)
         super(CollectiveCollectionFilterAjaxEnabledLayer, self).setUpPloneSite(portal)
 
+
 AJAX_ENABLED_FIXTURE = CollectiveCollectionFilterAjaxEnabledLayer()
 COLLECTIVE_COLLECTIONFILTER_ACCEPTANCE_TESTING_AJAX_ENABLED = FunctionalTesting(
     bases=(

@@ -199,6 +199,7 @@ class BaseSearchView(BaseView):
     def urlquery(self):
         urlquery = {}
         urlquery.update(self.top_request.form)
+
         for it in (
             TEXT_IDX,
             'b_start',
@@ -225,6 +226,7 @@ class BaseSearchView(BaseView):
             '?' + query_param if query_param else None
         ] if it])
         return ajax_url
+
 
 if HAS_GEOLOCATION:
 

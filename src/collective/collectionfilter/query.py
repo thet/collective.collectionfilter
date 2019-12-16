@@ -8,7 +8,37 @@ from logging import getLogger
 from zope.component import getUtility
 import plone.api
 
+
 logger = getLogger('collective.collectionfilter')
+MULTISPACE = u'\u3000'
+BAD_CHARS = ('?', '-', '+', '*', MULTISPACE)
+
+
+def quote_unsafe_chars(s):
+    # We need to quote parentheses when searching text indices
+    if '(' in s:
+        s = s.replace('(', '"("')
+    if ')' in s:
+        s = s.replace(')', '")"')
+    if MULTISPACE in s:
+        s = s.replace(MULTISPACE, ' ')
+    return s
+
+
+def quote_keywords(term):
+    # The terms and, or and not must be wrapped in quotes to avoid
+    # being parsed as logical query atoms.
+    if term.lower() in ('and', 'or', 'not'):
+        term = '"%s"' % term
+    return term
+
+
+def sanitise_search_query(query):
+    for char in BAD_CHARS:
+        query = query.replace(char, u" ")
+    clean_query = [quote_keywords(token) for token in query.split()]
+    clean_query = quote_unsafe_chars(clean_query)
+    return u" ".join(clean_query)
 
 
 def make_query(params_dict):
@@ -51,7 +81,9 @@ def make_query(params_dict):
                     params_dict[idx])
 
     if TEXT_IDX in params_dict and params_dict.get(TEXT_IDX):
-        query_dict[TEXT_IDX] = safe_decode(params_dict.get(TEXT_IDX))
+        safe_text = safe_decode(params_dict.get(TEXT_IDX))
+        clean_searchable_text = sanitise_search_query(safe_text)
+        query_dict[TEXT_IDX] = clean_searchable_text
 
     # Filter by path if passed in
     if 'path' in params_dict:
