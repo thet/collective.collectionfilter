@@ -1,6 +1,18 @@
 collective.collectionfilter
 ===========================
 
+|CI| |Coverage|
+
+|Workflows|
+
+.. |CI| image:: https://github.com/collective/collective.collectionfilter/workflows/CI/badge.svg
+   :target: https://github.com/collective/collective.collectionfilter/actions
+.. |Coverage| image:: https://coveralls.io/repos/github/collective/collective.collectionfilter/badge.svg
+   :target: https://coveralls.io/github/collective/collective.collectionfilter
+.. |Workflows| image:: http://github-actions.40ants.com/collective/collective.collectionfilter/matrix.svg
+   :target: https://github.com/collective/collective.collectionfilter/actions
+
+
 Faceted navigation filter for collection results.
 
 This Plone 5 addon allows you to filter collections results for additional catalog metadata.
@@ -21,6 +33,8 @@ There are four portlets/tiles available for filtering:
     is activated on a contenttype. See installation notes below)
 ``Section Filter``
     a list of site sections (folders) you can filter on
+``Collection Result Listing Sort``
+    a list of indexes where the user can sort the filtered result listing
 
 
 Filter Results with portlets
