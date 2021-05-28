@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
 from Acquisition import aq_inner
+from Products.CMFPlone.utils import get_top_request
+from Products.CMFPlone.utils import safe_unicode
+from Products.Five import BrowserView
 from collective.collectionfilter import PLONE_VERSION
 from collective.collectionfilter.filteritems import get_filter_items
 from collective.collectionfilter.interfaces import IGroupByCriteria
@@ -11,14 +14,10 @@ from collective.collectionfilter.utils import safe_iterable
 from collective.collectionfilter.vocabularies import TEXT_IDX
 from plone import api
 from plone.api.portal import get_registry_record as getrec
-from plone.app.contenttypes.behaviors.collection import ICollection
 from plone.app.uuid.utils import uuidToCatalogBrain
-from plone.app.uuid.utils import uuidToObject
 from plone.i18n.normalizer.interfaces import IIDNormalizer
 from plone.memoize import instance
 from plone.uuid.interfaces import IUUID
-from Products.CMFPlone.utils import get_top_request
-from Products.CMFPlone.utils import safe_unicode
 from six.moves.urllib.parse import urlencode
 from zope.component import getUtility
 from zope.component import queryUtility
@@ -284,30 +283,49 @@ if HAS_GEOLOCATION:
             return ajax_url
 
         @property
-        def locations(self):
-            custom_query = {}  # Additional query to filter the collection
-
-            collection = uuidToObject(self.collection_uuid)
-            if not collection:
-                return None
-
+        def geojson_ajax_url(self):
             # Recursively transform all to unicode
-            request_params = safe_decode(self.top_request.form or {})
-
-            # Get all collection results with additional filter
-            # defined by urlquery
-            custom_query = base_query(request_params)
-            custom_query = make_query(custom_query)
-            return ICollection(collection).results(
-                batch=False, brains=True, custom_query=custom_query
+            request_params = safe_decode(self.top_request.form)
+            urlquery = base_query(
+                request_params, extra_ignores=['latitude', 'longitude'])
+            query_param = urlencode(safe_encode(urlquery), doseq=True)
+            geojson_ajax_url = u'{}/@@geodata.json?geojson-limit={}{}'.format(
+                self.collection.getURL(),
+                self.settings.geojson_properties_limit,
+                '&' + query_param if query_param else '',
             )
+            return geojson_ajax_url
 
         @property
-        def data_geojson(self):
-            """Return the geo location as GeoJSON string."""
-            features = []
+        def map_configuration(self):
+            config = {
+                "fullscreencontrol": getrec("geolocation.fullscreen_control"),
+                "locatecontrol": getrec("geolocation.locate_control"),
+                "zoomcontrol": getrec("geolocation.zoom_control"),
+                "minimap": getrec("geolocation.show_minimap"),
+                "default_map_layer": self.settings.default_map_layer,
+                "map_layers": [
+                    {"title": translate(_(it), context=self.request), "id": it}
+                    for it in self.settings.map_layers
+                ],
+            }
+            return json.dumps(config)
 
-            for it in self.locations:
+    class GeoJSON(BaseView, BrowserView):
+
+        def __call__(self):
+            """Return the geo location as GeoJSON string."""
+            self.request.response.setHeader("Content-type", "application/json")
+            features = []
+            locations = self.locations
+            count = len(locations)
+
+            try:
+                limit = int(self.request.get("geojson-limit"))
+            except Exception:
+                limit = 500
+
+            for it in locations:
                 if not it.longitude or not it.latitude:
                     # these ``it`` are brains, so anything which got lat/lng
                     # indexed can be used.
@@ -326,13 +344,14 @@ if HAS_GEOLOCATION:
                     },
                 }
 
-                props = IGeoJSONProperties(it.getObject(), None)
-                if getattr(props, "popup", None):
-                    feature["properties"]["popup"] = props.popup
-                if getattr(props, "color", None):
-                    feature["properties"]["color"] = props.color
-                if getattr(props, "extraClasses", None):
-                    feature["properties"]["extraClasses"] = props.extraClasses
+                if count < limit:
+                    props = IGeoJSONProperties(it.getObject(), None)
+                    if getattr(props, 'popup', None):
+                        feature['properties']['popup'] = props.popup
+                    if getattr(props, 'color', None):
+                        feature['properties']['color'] = props.color
+                    if getattr(props, 'extraClasses', None):
+                        feature['properties']['extraClasses'] = props.extraClasses
 
                 features.append(feature)
 
@@ -343,16 +362,19 @@ if HAS_GEOLOCATION:
             return geo_json
 
         @property
-        def map_configuration(self):
-            config = {
-                "fullscreencontrol": getrec("geolocation.fullscreen_control"),
-                "locatecontrol": getrec("geolocation.locate_control"),
-                "zoomcontrol": getrec("geolocation.zoom_control"),
-                "minimap": getrec("geolocation.show_minimap"),
-                "default_map_layer": self.settings.default_map_layer,
-                "map_layers": [
-                    {"title": translate(_(it), context=self.request), "id": it}
-                    for it in self.settings.map_layers
-                ],
-            }
-            return json.dumps(config)
+        def locations(self):
+
+            if not hasattr(self.context, "results"):
+                # skip if context is not queryable
+                return []
+
+            # Recursively transform all to unicode
+            request_params = safe_decode(self.top_request.form or {})
+
+            # Get all collection results with additional filter
+            # defined by urlquery
+            custom_query = base_query(request_params)
+            custom_query = make_query(custom_query)
+            return self.context.results(
+                batch=False, brains=True, custom_query=custom_query
+            )
