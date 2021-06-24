@@ -109,3 +109,14 @@ Scenario: Combine search and OR filter
       and Should be 1 collection results
       and I search for "Event"
       and Should be 1 collection results
+
+Scenario: I can access search through ARIA
+
+    Manage portlets
+    Add search portlet
+    Go to  ${PLONE_URL}/testcollection
+
+    Wait Until Element Is Visible  xpath=//input[@name='SearchableText' and @aria-labelledby='filterSearch-SearchableText']
+    Click element  xpath=//form[@role='search' and @id='searchForm']
+
+    Element should be focused  xpath=//input[@type='search' and @aria-labelledby='filterSearch-SearchableText']
