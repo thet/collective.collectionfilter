@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from Acquisition import aq_inner
 from collective.collectionfilter import PLONE_VERSION
-from collective.collectionfilter.filteritems import get_filter_items
+from collective.collectionfilter.filteritems import ICollectionish, get_filter_items
 from collective.collectionfilter.interfaces import IGroupByCriteria
 from collective.collectionfilter.query import make_query
 from collective.collectionfilter.utils import base_query
@@ -9,9 +9,10 @@ from collective.collectionfilter.utils import safe_decode
 from collective.collectionfilter.utils import safe_encode
 from collective.collectionfilter.utils import safe_iterable
 from collective.collectionfilter.vocabularies import TEXT_IDX
-from plone import api
+from collective.collectionfilter.vocabularies import DEFAULT_TEMPLATES
+from collective.collectionfilter.vocabularies import get_conditions
+from collective.collectionfilter.vocabularies import EMPTY_MARKER
 from plone.api.portal import get_registry_record as getrec
-from plone.app.contenttypes.behaviors.collection import ICollection
 from plone.app.uuid.utils import uuidToCatalogBrain
 from plone.app.uuid.utils import uuidToObject
 from plone.i18n.normalizer.interfaces import IIDNormalizer
@@ -24,7 +25,9 @@ from zope.component import getUtility
 from zope.component import queryUtility
 from zope.i18n import translate
 from zope.schema.interfaces import IVocabularyFactory
-
+from Products.CMFCore.Expression import Expression, getExprContext
+from plone import api
+from plone.memoize import ram
 import json
 
 
@@ -217,7 +220,7 @@ class BaseSearchView(BaseView):
 
 class BaseSortOnView(BaseView):
     def results(self):
-        collection = self.collection.getObject()
+        collection = ICollectionish(self.collection.getObject())
         curr_val = self.top_request.get("sort_on", collection.sort_on)
         curr_order = self.top_request.get(
             "sort_order", "descending" if collection.sort_reversed else "ascending"
@@ -259,6 +262,124 @@ class BaseSortOnView(BaseView):
         return ajax_url
 
 
+def _exp_cachekey(method, self, target_collection, request):
+    return (
+        target_collection,
+        json.dumps(request),
+        self.settings.view_name,
+        self.settings.as_links
+    )
+
+
+class BaseInfoView(BaseView):
+
+    # TODO: should just cache on request?
+    @ram.cache(_exp_cachekey)
+    def get_expression_context(self, collection, request_params):
+        count_query = {}
+        query = base_query(request_params)
+        collection_url = collection.absolute_url()
+        # TODO: take out the search
+        # TODO: match them to indexes and get proper names
+        # TODO: format values properly
+        # TODO: do we want to read out sort too?
+        count_query.update(query)
+        # TODO: delay evaluating this unless its needed
+        # TODO: This could be cached as same result total appears in other filter counts
+        catalog_results_fullcount = ICollectionish(collection).results(
+            make_query(count_query), request_params
+        )
+        results = len(catalog_results_fullcount)
+
+        # Clean up filters and values
+        if 'collectionfilter' in query:
+            del query['collectionfilter']
+        groupby_criteria = getUtility(IGroupByCriteria).groupby
+        q = []
+        for group_by, value in query.items():
+            if group_by not in groupby_criteria:
+                continue
+            # TODO: we actually have idx not group_by
+            # idx = groupby_criteria[group_by]['index']
+            value = safe_decode(value)
+            current_idx_value = safe_iterable(value)
+            # Set title from filter value with modifications,
+            # e.g. uuid to title
+            display_modifier = groupby_criteria[group_by].get('display_modifier', None)
+            titles = []
+            for filter_value in current_idx_value:
+                title = filter_value
+                if filter_value is not EMPTY_MARKER and callable(display_modifier):
+                    title = safe_decode(display_modifier(filter_value))
+                # TODO: still no nice title for filter indexes? Should be able to get from query builder
+                # TODO: we don't know if filter is AND/OR to display that detail
+                # TODO: do we want no follow always?
+                # TODO: should support clearing filter? e.g. if single value, click to remove?
+                # Build filter url query
+                query_param = urlencode(safe_encode({group_by: filter_value}), doseq=True)
+                url = "/".join(
+                    [
+                        it
+                        for it in [
+                            collection_url,
+                            self.settings.view_name,
+                            "?" + query_param if query_param else None,
+                        ]
+                        if it
+                    ]
+                )
+                # TODO: should have option for nofollow?
+                if self.settings.as_links:
+                    titles.append(u'<a href="{}">{}</a>'.format(url, title))
+                else:
+                    titles.append(title)
+            q.append((group_by, titles))
+
+        # Set up context for running templates
+        expression_context = getExprContext(
+            collection,
+        )
+        expression_context.setLocal("results", results)
+        expression_context.setLocal("query", q)
+        expression_context.setLocal("search", query.get("SearchableText", ""))
+        return expression_context
+
+    def info_contents(self):
+        request_params = self.top_request.form or {}
+        expression_context = self.get_expression_context(self.collection.getObject(), request_params)
+
+        parts = []
+        for template in self.settings.template_type:
+            _, exp = DEFAULT_TEMPLATES.get(template)
+            # TODO: precompile templates
+            text = Expression(exp)(expression_context)
+            if text:
+                parts.append(text)
+        line = u" ".join(parts)
+        # TODO: should be more generic i18n way to do this?
+        line = line.replace(u" ,", u",").replace(" :", ":")
+        return line
+
+    @property
+    def is_available(self):
+        target_collection = self.collection
+        if target_collection is None:
+            return False
+        request_params = self.top_request.form or {}
+        expression_context = self.get_expression_context(target_collection.getObject(), request_params)
+
+        conditions = dict((k, (t, e)) for k, t, e in get_conditions())
+        if not self.settings.hide_when:
+            return True
+        for cond in self.settings.hide_when:
+            _, exp = conditions.get(cond)
+            # TODO: precompile templates
+            res = Expression(exp)(expression_context)
+            if not res:
+                return True
+        return False
+
+
 if HAS_GEOLOCATION:
 
     class BaseMapsView(BaseView):
@@ -298,9 +419,7 @@ if HAS_GEOLOCATION:
             # defined by urlquery
             custom_query = base_query(request_params)
             custom_query = make_query(custom_query)
-            return ICollection(collection).results(
-                batch=False, brains=True, custom_query=custom_query
-            )
+            return ICollectionish(collection).results(custom_query, request_params)
 
         @property
         def data_geojson(self):

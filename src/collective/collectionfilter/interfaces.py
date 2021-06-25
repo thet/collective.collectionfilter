@@ -4,11 +4,11 @@ from collective.collectionfilter import PLONE_VERSION
 from collective.collectionfilter import utils
 from plone.api.portal import get_registry_record as getrec
 from plone.app.z3cform.widget import RelatedItemsFieldWidget
+from plone.app.z3cform.widget import SelectFieldWidget
 from plone.autoform.directives import widget
 from zope import schema
 from zope.interface import Interface
 from zope.publisher.interfaces.browser import IDefaultBrowserLayer
-
 
 try:
     from plone.formwidget.geolocation.vocabularies import default_map_layer
@@ -45,8 +45,8 @@ class ICollectionFilterBaseSchema(Interface):
         title=_(u"label_target_collection", default=u"Alternative Target Collection"),
         description=_(
             u"help_target_collection",
-            default=u"We use the current context as collection. As an alternative you can select a different collection as source for the filter items "
-            u"and where the filter is applied.",
+            default=u"We use the current context as collection. As an alternative you can select a different collection"
+            u" as source for the filter items and where the filter is applied.",
         ),
         required=False,
         vocabulary="plone.app.vocabularies.Catalog",
@@ -185,6 +185,8 @@ class ICollectionFilterResultListSort(ICollectionFilterBaseSchema):
         ),
         required=True,
     )
+    # NB needed as InAndOut breaks tiles in 5.0
+    widget('sort_on', SelectFieldWidget, pattern_options=dict(orderable=True))
 
     input_type = schema.Choice(
         title=_("label_input_type", u"Input Type"),
@@ -195,6 +197,64 @@ class ICollectionFilterResultListSort(ICollectionFilterBaseSchema):
         ),
         required=True,
         vocabulary="collective.collectionfilter.InputType",
+    )
+
+
+class ICollectionFilterInfo(ICollectionFilterBaseSchema):
+    """Schema for the result title/info
+    """
+    template_type = schema.Tuple(
+        title=_('label_template_type', u'Template Type'),
+        description=_(
+            'help_template_type',
+            u'What information to display about the search and results'
+        ),
+        value_type=schema.Choice(
+            title=u'Parts',
+            vocabulary="collective.collectionfilter.TemplateParts",
+        ),
+        required=True,
+    )
+    # NB needed as InAndOut breaks tiles in 5.0
+    widget('template_type', SelectFieldWidget, pattern_options=dict(orderable=True))
+
+    hide_when = schema.Tuple(
+        title=_('label_hide_when', u'Hide when'),
+        description=_(
+            'help_hide_when',
+            u'Hide if all of these conditions are true'
+        ),
+        value_type=schema.Choice(
+            title=u'Condition',
+            vocabulary="collective.collectionfilter.InfoConditions",
+        ),
+        required=False,
+    )
+    # NB needed as InAndOut breaks tiles in 5.0
+    widget('hide_when', SelectFieldWidget, pattern_options=dict(orderable=True))
+
+    as_links = schema.Bool(
+        title=_(u"label_display_as_links", default=u"Display as Links"),
+        description=_(
+            u"help_display_as_links",
+            default=u"Filter options can be displayed as links which reset the search to just this value.",
+        ),
+        default=True,
+        required=False,
+    )
+
+
+class ICollectionFilterInfoTile(ICollectionFilterInfo):
+    """ Extra settings for tile """
+
+    display_as_title = schema.Bool(
+        title=_(u"label_display_as_title", default=u"Display as Title"),
+        description=_(
+            u"help_display_as_title",
+            default=u"Appear as a page title",
+        ),
+        default=False,
+        required=False,
     )
 
 

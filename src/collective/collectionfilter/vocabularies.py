@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from collections import OrderedDict
 from collective.collectionfilter import _
 from collective.collectionfilter.interfaces import IGroupByCriteria
 from collective.collectionfilter.interfaces import IGroupByModifier
@@ -226,4 +227,65 @@ def SortOnIndexesVocabulary(context):
     items = [
         SimpleTerm(title=_(v["title"]), value=k) for k, v in sortable_indexes.items()
     ]  # noqa
+    return SimpleVocabulary(items)
+
+
+DEFAULT_TEMPLATES = OrderedDict([
+    ("search_for", (u"Search for",
+                    u"string:Search for")),
+    ("filter_colon_value", (u"{Filter}: {value}, ...",
+                            u'python: u", ".join(u"{}: {}".format(k,u"/".join(v)) for k, v in query)')),
+    ("value_comma", (u"{value}, ...",
+                     u'python: ", u".join(u"{}".format(v) for _,values in query for v in values)')),
+    ("value_quoted_filter", (u'"{value}" {Filter}, ...',
+                             u'''python: u", ".join(u'"{}" {}'.format(u"/".join(v),k) for k, v in query)''')),
+    ("with_keywords", (u"with keywords",
+                       u"string:with keywords")),
+    ("search_quoted", (u'"{search}"',
+                       u'''python: u'"{}"'.format(search) if search else '' ''')),
+    ("hyphen", (u" - ",
+                u"string:-")),
+    ("comma", (u", ",
+               u"string:, ")),
+    ("has_returned", (u"has returned",
+                      u"string:has returned")),
+    ("with", (u"with",
+              u"string:with")),
+    ("result_count", (u"{results}",
+                      u"python:str(results)")),
+    ("results", (u"results",
+                 u"python: 'result' if results == 1 else 'results'")),
+    ("documents", (u"documents",
+                   u"python: 'document' if results == 1 else 'documents'")),
+])
+
+
+@provider(IVocabularyFactory)
+def TemplatePartsVocabulary(context):
+    items = [SimpleTerm(title=v[0], value=k) for k, v in DEFAULT_TEMPLATES.items()]
+    return SimpleVocabulary(items)
+
+
+def get_conditions():
+    items = [
+        ("any_filter", u"Any filter", "query"),
+        ("no_filter", u"No filter", "not:query"),
+        ("search", u"Keyword search", "search"),
+        ("no_search", u"Keyword search", "not:search"),
+        ("results", u"Results", "results"),
+        ("no_results", u"No Results", "not:results"),
+    ]
+    groupby = getUtility(IGroupByCriteria).groupby
+    for it in groupby.keys():
+        i = ("filter_{}".format(it), u"Filtered by {}".format(_(it)), "python:'{}' in query".format(it))
+        items.append(i)
+        i = ("no_filter_{}".format(it), u"Not Filtered by {}".format(_(it)), "python:'{}' not in query".format(it))
+        items.append(i)
+    return items
+
+
+@provider(IVocabularyFactory)
+def InfoConditionsVocabulary(context):
+
+    items = [SimpleTerm(title=title, value=id) for id, title, _ in get_conditions()]
     return SimpleVocabulary(items)

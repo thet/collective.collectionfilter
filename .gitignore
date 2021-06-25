@@ -41,3 +41,5 @@ node_modules/
 .python-version
 requirements.txt
 annotate.txt
+node_modules
+.vscode
